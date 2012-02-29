@@ -137,13 +137,33 @@ AC_ARG_WITH([erlang], [AC_HELP_STRING([--with-erlang=PATH],
 ])
 AC_SUBST(ERLANG_FLAGS)
 
-PKG_CHECK_MODULES([JS], [mozjs185], [
+AC_ARG_WITH([js-lib], [AC_HELP_STRING([--with-js-lib=PATH],
+            [set PATH to the SpiderMonkey library directory])],
+    [
+    JS_LIB_DIR=$withval
+    JS_LIBS="-L$JS_LIB_DIR"
+    AC_MSG_RESULT(yo $JS_LIBS)
+], [
+    PKG_CHECK_MODULES([JS], [mozjs185], [
     JS_LIB_DIR="$(${PKG_CONFIG} --variable=libdir mozjs185)"
+    ], [
+        PKG_CHECK_MODULES([JS], [mozilla-js >= 1.7], [
+            JS_LIB_DIR="$(${PKG_CONFIG} --variable=sdkdir mozilla-js)/lib"
+        ], [
+            JS_LIB_DIR="${libdir}"
+        ])
+    ])
+])
+
+
+AC_ARG_WITH([js-include], [AC_HELP_STRING([--with-js-include=PATH],
+    [set PATH to the SpiderMonkey include directory])], [
+    JS_INCLUDE="$withval"
+    JS_CFLAGS="-I$JS_INCLUDE"
 ], [
     PKG_CHECK_MODULES([JS], [mozilla-js >= 1.7], [
-        JS_LIB_DIR="$(${PKG_CONFIG} --variable=sdkdir mozilla-js)/lib"
+        JS_CFLAGS="$(${PKG_CONFIG} --variable=includedir mozilla-js)/lib"
     ], [
-        JS_LIB_DIR="${libdir}"
         JS_CFLAGS="-I/usr/include"
         JS_CFLAGS="$JS_CFLAGS -I/usr/include/js"
         JS_CFLAGS="$JS_CFLAGS -I/usr/include/mozjs"
@@ -151,19 +171,6 @@ PKG_CHECK_MODULES([JS], [mozjs185], [
         JS_CFLAGS="$JS_CFLAGS -I/opt/local/include/js"
     ])
 ])
-
-AC_ARG_WITH([js-include], [AC_HELP_STRING([--with-js-include=PATH],
-    [set PATH to the SpiderMonkey include directory])], [
-    JS_INCLUDE="$withval"
-    JS_CFLAGS="-I$JS_INCLUDE"
-], [])
-
-AC_ARG_WITH([js-lib], [AC_HELP_STRING([--with-js-lib=PATH],
-    [set PATH to the SpiderMonkey library directory])],
-    [
-    JS_LIB_DIR=$withval
-    JS_LIBS="-L$withval"
-], [])
 
 use_js_trunk=no
 AC_ARG_ENABLE([js-trunk], [AC_HELP_STRING([--enable-js-trunk],
@@ -177,11 +184,8 @@ AS_CASE([$(uname -s)],
     [CYGWIN*], [] ,
     [*], [
     CPPFLAGS="$CPPFLAGS -I/opt/local/include"
-    CPPFLAGS="$CPPFLAGS -I/opt/local/include/js"
     CPPFLAGS="$CPPFLAGS -I/usr/local/include"
-    CPPFLAGS="$CPPFLAGS -I/usr/local/include/js"
     CPPFLAGS="$CPPFLAGS -I/usr/include"
-    CPPFLAGS="$CPPFLAGS -I/usr/include/js"
     LDFLAGS="$LDFLAGS -L/opt/local/lib"
     LDFLAGS="$LDFLAGS -L/usr/local/lib"
 ])
@@ -211,6 +215,8 @@ LIBS="$JS_LIBS $LIBS"
 OLD_CPPFLAGS="$CPPFLAGS"
 CPPFLAGS="$JS_CFLAGS $CPPFLAGS"
 
+AC_MSG_RESULT(js flags $CPPFLAGS)
+
 AC_CHECK_HEADER([jsapi.h], [], [
     AC_CHECK_HEADER([js/jsapi.h],
         [
@@ -222,39 +228,65 @@ AC_CHECK_HEADER([jsapi.h], [], [
 Are the Mozilla SpiderMonkey headers installed?])
         ])])
 
-AC_CHECK_LIB([mozjs185], [JS_NewContext], [JS_LIB_BASE=mozjs185], [
-    AC_CHECK_LIB([mozjs185-1.0], [JS_NewContext], [JS_LIB_BASE=mozjs185-1.0], [
-        AC_CHECK_LIB([mozjs], [JS_NewContext], [JS_LIB_BASE=mozjs], [
-            AC_CHECK_LIB([js], [JS_NewContext], [JS_LIB_BASE=js], [
-                AC_CHECK_LIB([js3250], [JS_NewContext], [JS_LIB_BASE=js3250], [
-                    AC_CHECK_LIB([js32], [JS_NewContext], [JS_LIB_BASE=js32], [
-                        AC_MSG_ERROR([Could not find the js library.
+use_js170=no
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+                   #include <jsconfig.h>
+                   ]],
+                   [[
+                    #if JS_VERSION == 170
+                    // Use spidermonkey 1.7.0
+                    #else
+                    # Not Spidermonkey 1.7.0
+                    #endif
+                    ]])],
+                    [use_js170=yes],
+                    [])
 
-Is the Mozilla SpiderMonkey library installed?])])])])])])])
+if test "$use_js170" = "no"; then
+    AC_CHECK_LIB([mozjs185], [JS_NewContext], [JS_LIB_BASE=mozjs185], [
+        AC_CHECK_LIB([mozjs185-1.0], [JS_NewContext], [JS_LIB_BASE=mozjs185-1.0], [
+            AC_CHECK_LIB([mozjs], [JS_NewContext], [JS_LIB_BASE=mozjs], [
+                AC_CHECK_LIB([js], [JS_NewContext], [JS_LIB_BASE=js], [
+                    AC_CHECK_LIB([js3250], [JS_NewContext], [JS_LIB_BASE=js3250], [
+                        AC_CHECK_LIB([js32], [JS_NewContext], [JS_LIB_BASE=js32], [
+                            AC_MSG_ERROR([Could not find the js library.
 
-# Figure out what version of SpiderMonkey to use
+    Is the Mozilla SpiderMonkey library installed?])])])])])])])
 
-AC_CHECK_LIB([$JS_LIB_BASE], [JS_NewCompartmentAndGlobalObject],
-    # Prevent people from accidentally using SpiderMonkey's that are too new
+    # Figure out what version of SpiderMonkey to use
 
-    if test "$use_js_trunk" = "no"; then
-        AC_CHECK_DECL([JSOPTION_ANONFUNFIX], [], [
-            AC_MSG_ERROR([Your SpiderMonkey library is too new.
+    AC_CHECK_LIB([$JS_LIB_BASE], [JS_NewCompartmentAndGlobalObject],
+        # Prevent people from accidentally using SpiderMonkey's that are too new
 
-Versions of SpiderMonkey after the js185-1.0.0 release remove the optional
-enforcement of preventing anonymous functions in a statement context. This
-will most likely break your existing JavaScript code as well as render all
-example code invalid.
+        if test "$use_js_trunk" = "no"; then
+            AC_CHECK_DECL([JSOPTION_ANONFUNFIX], [], [
+                AC_MSG_ERROR([Your SpiderMonkey library is too new.
 
-If you wish to ignore this error pass --enable-js-trunk to ./configure.])],
-        [[#include <jsapi.h>]])
-    fi
-    AC_DEFINE([SM185], [1],
-        [Use SpiderMonkey 1.8.5]))
+    Versions of SpiderMonkey after the js185-1.0.0 release remove the optional
+    enforcement of preventing anonymous functions in a statement context. This
+    will most likely break your existing JavaScript code as well as render all
+    example code invalid.
 
-AC_CHECK_LIB([$JS_LIB_BASE], [JS_ThrowStopIteration],
-    AC_DEFINE([SM180], [1],
-        [Use SpiderMonkey 1.8.0]))
+    If you wish to ignore this error pass --enable-js-trunk to ./configure.])],
+            [[#include <jsapi.h>]])
+        fi
+        AC_DEFINE([SM185], [1],
+            [Use SpiderMonkey 1.8.5]))
+
+    AC_CHECK_LIB([$JS_LIB_BASE], [JS_ThrowStopIteration],
+        AC_DEFINE([SM180], [1],
+            [Use SpiderMonkey 1.8.0]))
+
+else
+
+    AC_CHECK_LIB([mozjs], [JS_NewContext], [JS_LIB_BASE=mozjs], [
+                AC_CHECK_LIB([js], [JS_NewContext], [JS_LIB_BASE=js], [
+                    AC_CHECK_LIB([js3250], [JS_NewContext], [JS_LIB_BASE=js3250], [
+                        AC_CHECK_LIB([js32], [JS_NewContext], [JS_LIB_BASE=js32], [
+                            AC_MSG_ERROR([Could not find the js library.
+
+    Is the Mozilla SpiderMonkey library installed?])])])])])
+fi
 
 AC_CHECK_LIB([$JS_LIB_BASE], [JS_GetStringCharsAndLength],
     AC_DEFINE([HAVE_JS_GET_STRING_CHARS_AND_LENGTH], [1],
