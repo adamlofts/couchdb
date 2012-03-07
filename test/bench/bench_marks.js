@@ -29,6 +29,7 @@ var timeit = function(func) {
 var report = function(name, rate) {
   rate = Math.round(parseFloat(rate) * 100) / 100;
   console.log("" + name + ": " + rate + " docs/second");
+  results[name] = rate;
 };
 
 var makeDocs = function(n) {
@@ -39,6 +40,7 @@ var makeDocs = function(n) {
   return docs;
 };
 
+var results = {}
 var couchTests = {};
 
 couchTests.single_doc_insert = function() {

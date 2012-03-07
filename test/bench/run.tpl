@@ -38,6 +38,13 @@ if [ -z $COUCHDB_NO_START ]; then
 	sleep 1 # give it a sec
 fi
 
+if [ "$1" = "submit" ]
+then
+	POST_RESULT=$JS_BENCH_DIR/post_bench_marks.js
+else
+    POST_RESULT=
+fi
+
 # start the tests
 $COUCHJS -H -u $COUCH_URI_FILE \
 	$SCRIPT_DIR/json2.js \
@@ -47,7 +54,8 @@ $COUCHJS -H -u $COUCH_URI_FILE \
 	$SCRIPT_DIR/couch_test_runner.js \
 	$JS_BENCH_DIR/bench_marks.js \
 	$JS_TEST_DIR/couch_http.js \
-	$JS_TEST_DIR/cli_runner.js
+	$JS_TEST_DIR/cli_runner.js \
+	$POST_RESULT
 RESULT=$?
 
 	# stop CouchDB
