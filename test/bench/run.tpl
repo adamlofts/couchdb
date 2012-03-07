@@ -18,11 +18,42 @@ JS_TEST_DIR=$SRC_DIR/test/javascript
 JS_BENCH_DIR=$SRC_DIR/test/bench
 
 COUCHJS=%abs_top_builddir%/src/couchdb/priv/couchjs
+COUCH_URI_FILE=%localstaterundir%/couch.uri
 
-cat $SCRIPT_DIR/json2.js \
-    $SCRIPT_DIR/couch.js \
-    $JS_TEST_DIR/couch_http.js \
-    $JS_BENCH_DIR/bench_marks.js \
-    $JS_TEST_DIR/cli_runner.js \
-    | $COUCHJS -
+# stop CouchDB on exit from various signals
+abort() {
+	trap - 0
+	./utils/run -d
+	exit 2
+}
 
+# start CouchDB
+if [ -z $COUCHDB_NO_START ]; then
+        make dev
+	trap 'abort' 0 1 2 3 4 6 8 15
+	./utils/run -b -r 1 -n \
+		-a $SRC_DIR/etc/couchdb/default_dev.ini \
+		-a $SRC_DIR/test/random_port.ini \
+		-a $SRC_DIR/etc/couchdb/local_dev.ini
+	sleep 1 # give it a sec
+fi
+
+# start the tests
+$COUCHJS -H -u $COUCH_URI_FILE \
+	$SCRIPT_DIR/json2.js \
+	$SCRIPT_DIR/sha1.js \
+	$SCRIPT_DIR/oauth.js \
+	$SCRIPT_DIR/couch.js \
+	$SCRIPT_DIR/couch_test_runner.js \
+	$JS_BENCH_DIR/bench_marks.js \
+	$JS_TEST_DIR/couch_http.js \
+	$JS_TEST_DIR/cli_runner.js
+RESULT=$?
+
+	# stop CouchDB
+if [ -z $COUCHDB_NO_START ]; then
+	./utils/run -d
+	trap - 0
+fi
+
+exit $RESULT
