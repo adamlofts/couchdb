@@ -976,6 +976,46 @@
         );
       }
       return uuidCache.shift();
+    },
+
+    /**
+     * Fetch a new UUID or array of UUIDs asynchronously
+     * @see <a href="http://techzone.couchbase.com/sites/default/files/
+     * uploads/all/documentation/couchbase-api-misc.html#couchbase-api-
+     * misc_uuids_get">docs for /_uuids</a>
+     * @param {Function} cb A function (uuid) { } called with the UUID or array of UUIDs
+     * @param {Int} count Optionally specify the number of uuids to return. If specified the response will be an array
+     * @param {Int} cacheNum Number of uuids to keep cached for future use
+     */
+    getUUID: function(cb, count, cacheNum) {
+      if (cacheNum === undefined) {
+        cacheNum = 1;
+      }
+      var that = this;
+      var ret;
+
+      if ((count && uuidCache.length >= count) || (!count && uuidCache.length)) {
+        if (count === undefined) {
+          ret = uuidCache.shift();
+        } else {
+          ret = uuidCache.slice(0, count);
+          uuidCache = uuidCache.slice(count);
+        }
+        cb(ret);
+        return;
+      }
+
+      ajax({
+        url: this.urlPrefix + '/_uuids?',
+        data: {count:Math.max(count || 1, cacheNum)},
+      },{
+	    success: function(resp) {
+	      $.merge(uuidCache, resp.uuids);
+	      that.getUUID(cb, count, cacheNum);
+	    }
+      },
+        "Failed to retrieve UUID batch."
+      );
     }
   });
 
