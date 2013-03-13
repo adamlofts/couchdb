@@ -54,6 +54,7 @@ send(Socket, Data) ->
 close({ssl, Socket}) ->
     ssl:close(Socket);
 close(Socket) ->
+    gen_tcp:shutdown(Socket, read_write),
     gen_tcp:close(Socket).
 
 port({ssl, Socket}) ->
